@@ -47,7 +47,7 @@ From the root of this repo:
 node ./scripts/install-home-local.mjs
 ```
 
-That copies the plugin to `~/plugins/documentation-governor` and updates `~/.agents/plugins/marketplace.json`.
+That copies the plugin to `~/plugins/documentation-governor`, updates `~/.agents/plugins/marketplace.json`, and enables the plugin in `~/.codex/config.toml`.
 
 After installing, restart Codex to pick up the plugin.
 

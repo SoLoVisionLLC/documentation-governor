@@ -21,6 +21,41 @@ function writeJson(filePath, payload) {
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
+function upsertEnabledPlugin(configText, pluginKey) {
+  const header = `[plugins."${pluginKey}"]`;
+  const entry = `${header}\nenabled = true\n`;
+
+  if (!configText.trim()) {
+    return `${entry}`;
+  }
+
+  if (configText.includes(header)) {
+    const blockPattern = new RegExp(
+      `\\[plugins\\.\"${pluginKey.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\"\\][\\s\\S]*?(?=\\n\\[[^\\n]+\\]|$)`,
+      "m"
+    );
+    const existingBlock = configText.match(blockPattern)?.[0] || header;
+
+    if (/^\s*enabled\s*=\s*(true|false)\s*$/m.test(existingBlock)) {
+      const nextBlock = existingBlock.replace(/^\s*enabled\s*=\s*(true|false)\s*$/m, "enabled = true");
+      return configText.replace(blockPattern, nextBlock);
+    }
+
+    return configText.replace(blockPattern, `${existingBlock.trimEnd()}\nenabled = true`);
+  }
+
+  return `${configText.trimEnd()}\n\n${entry}`;
+}
+
+function enablePlugin(configPath, pluginKey) {
+  const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
+  const next = upsertEnabledPlugin(current, pluginKey);
+  if (next !== current) {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, next.endsWith("\n") ? next : `${next}\n`);
+  }
+}
+
 function copyPlugin(sourceRoot, destinationRoot, force) {
   if (fs.existsSync(destinationRoot)) {
     if (!force) {
@@ -93,16 +128,20 @@ function main() {
     const homeDirectory = os.homedir();
     const destinationRoot = path.join(homeDirectory, "plugins", pluginName);
     const marketplacePath = path.join(homeDirectory, ".agents", "plugins", "marketplace.json");
+    const codexConfigPath = path.join(homeDirectory, ".codex", "config.toml");
 
     copyPlugin(pluginRoot, destinationRoot, force);
     const marketplace = loadMarketplace(marketplacePath);
+    const pluginKey = `${pluginName}@${marketplace.name}`;
     writeJson(
       marketplacePath,
       upsertMarketplaceEntry(marketplace, pluginName, pluginCategory)
     );
+    enablePlugin(codexConfigPath, pluginKey);
 
     console.log(`Installed plugin to ${destinationRoot}`);
     console.log(`Updated marketplace ${marketplacePath}`);
+    console.log(`Enabled plugin in ${codexConfigPath} as ${pluginKey}`);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

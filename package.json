@@ -1,0 +1,9 @@
+{
+  "name": "documentation-governor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone Codex plugin repo for documentation governance.",
+  "scripts": {
+    "install:home-local": "node ./scripts/install-home-local.mjs"
+  }
+}

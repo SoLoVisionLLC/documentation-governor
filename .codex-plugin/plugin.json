@@ -1,0 +1,38 @@
+{
+  "name": "documentation-governor",
+  "version": "0.1.0",
+  "description": "Portable Codex plugin for enforced documentation refresh, project discovery, and CI doc gating.",
+  "author": {
+    "name": "SoLo Support",
+    "email": "support@example.invalid",
+    "url": "https://github.com/solovision24"
+  },
+  "homepage": "https://github.com/solovision24/documentation-governor",
+  "repository": "https://github.com/solovision24/documentation-governor.git",
+  "license": "UNLICENSED",
+  "keywords": [
+    "documentation",
+    "codex",
+    "governance",
+    "ci"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Documentation Governor",
+    "shortDescription": "Keep docs synchronized with code and project inventory changes.",
+    "longDescription": "Bundles a Codex skill, deterministic governance scripts, and repo templates so documentation refreshes can be enforced instead of remembered.",
+    "developerName": "SoLo Support",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Refresh docs for the code changed in this branch.",
+      "Update the project catalog and documentation status files.",
+      "Explain why the docs governance check is failing."
+    ],
+    "brandColor": "#0F766E",
+    "websiteURL": "https://github.com/solovision24/documentation-governor"
+  }
+}

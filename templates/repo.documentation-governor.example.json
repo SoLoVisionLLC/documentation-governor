@@ -1,0 +1,43 @@
+{
+  "$schema": "./plugins/documentation-governor/schemas/documentation-governor.schema.json",
+  "version": 1,
+  "baseRef": "origin/main",
+  "catalogFile": "docs/_governance/project-catalog.json",
+  "statusFile": "docs/_governance/status.json",
+  "requireDocFileChange": true,
+  "codeGlobs": [
+    "apps/**",
+    "packages/**",
+    "services/**",
+    "native/**"
+  ],
+  "docGlobs": [
+    "docs/**",
+    "README.md"
+  ],
+  "ignoreGlobs": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "native/target/**"
+  ],
+  "projectDiscovery": [
+    {
+      "label": "apps",
+      "root": "apps"
+    },
+    {
+      "label": "packages",
+      "root": "packages"
+    },
+    {
+      "label": "services",
+      "root": "services"
+    },
+    {
+      "label": "native-crates",
+      "root": "native/crates"
+    }
+  ]
+}

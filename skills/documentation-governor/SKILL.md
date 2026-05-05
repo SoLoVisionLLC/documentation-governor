@@ -1,16 +1,31 @@
 ---
 name: documentation-governor
-description: Enforce repository documentation refreshes with a governed workflow that updates docs, project inventory, and a status stamp. Use when the user asks to refresh docs, explain a docs gate failure, or keep project documentation current after code changes.
+description: Enforce repository documentation refreshes with a governed workflow that updates docs, project inventory, and a status stamp. Use when the user asks to initialize Documentation Governor in a project, refresh docs, explain a docs gate failure, or keep project documentation current after code changes.
 ---
 
 # Documentation Governor
 
-This skill is for repositories that use `documentation-governor` to enforce documentation updates in CI.
+This skill is for repositories that use `documentation-governor` to set up and enforce documentation updates in CI.
 
-## Required workflow
+## New Project Setup
+
+When the user asks to initialize, install, onboard, govern, or add Documentation Governor to a project, first read the portable setup playbook at `../../PORTABLE_PROJECT_SETUP.md` relative to this skill file. Treat that guide as the authoritative source for repo-local setup.
+
+Set up or adapt the target repo so it has the portable guardrails from the guide:
+
+1. Add or update `./.documentation-governor.json` with repo-specific code, docs, inventory, ignore, catalog, and status paths.
+2. Add or update the repo-local wrapper scripts, including `scripts/documentation-governor.js` and `scripts/check-docs.js`, unless equivalent scripts already exist.
+3. Wire package scripts such as `docs:governor:bootstrap`, `docs:governor:catalog`, `docs:governor:refresh`, and `docs:check`.
+4. Add or merge the `AGENTS.md` documentation failsafe rules so future agents know this skill is required.
+5. Add or update human-readable maintenance docs and generated governance artifacts under the repo's docs tree.
+6. Run the bootstrap, refresh, and check commands from the target repo, then leave `docs:check` passing.
+
+If the installed plugin cannot be located, immediately alert the user instead of silently skipping governance setup. Prefer adapting existing repo conventions over creating duplicate files or replacing unrelated docs.
+
+## Refresh Workflow
 
 1. Read `./.documentation-governor.json`.
-2. Run the installed plugin's catalog command. On Windows with a home-local install:
+2. Run the installed plugin's catalog command. Prefer repo-local `docs:governor:*` scripts when available. Otherwise, on Windows with a home-local install:
 
 ```bash
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& \"$HOME\\plugins\\documentation-governor\\scripts\\docs-catalog.ps1\" -Config ./.documentation-governor.json"

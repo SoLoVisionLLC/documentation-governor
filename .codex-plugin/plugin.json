@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Documentation Governor",
     "shortDescription": "Keep docs synchronized with code and project inventory changes.",
-    "longDescription": "Bundles a Codex skill, deterministic governance scripts, and repo templates so documentation refreshes can be enforced instead of remembered.",
+    "longDescription": "Bundles a Codex skill, deterministic governance scripts, repo templates, and local hook/watch workflows so documentation refreshes can be enforced instead of remembered.",
     "developerName": "SoLo Support",
     "category": "Productivity",
     "capabilities": [

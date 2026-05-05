@@ -2,18 +2,23 @@
   "$schema": "./plugins/documentation-governor/schemas/documentation-governor.schema.json",
   "version": 1,
   "baseRef": "origin/main",
-  "catalogFile": "docs/_governance/project-catalog.json",
-  "statusFile": "docs/_governance/status.json",
+  "catalogFile": "docs/maintenance/project-catalog.json",
+  "statusFile": "docs/maintenance/documentation-governor-status.json",
   "requireDocFileChange": true,
   "codeGlobs": [
     "apps/**",
     "packages/**",
     "services/**",
-    "native/**"
+    "native/**",
+    "scripts/**",
+    "package.json",
+    ".env.example"
   ],
   "docGlobs": [
     "docs/**",
-    "README.md"
+    "README.md",
+    "AGENTS.md",
+    ".documentation-governor.json"
   ],
   "ignoreGlobs": [
     "**/node_modules/**",

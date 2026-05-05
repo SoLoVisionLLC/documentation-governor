@@ -7,6 +7,8 @@ This document is the copy-forward guide for setting up Documentation Governor in
 - a missing skill or plugin causes an immediate user-facing alert
 - `docs:check` fails when governed code changed but docs/catalog/status were not refreshed
 - untracked files are included in the governed change check
+- a local pre-commit hook runs `docs:check` before commits
+- `docs:watch` is available for active implementation sessions so saved file changes trigger the same documentation guard locally
 
 The setup below assumes a project uses Node package scripts, but the same files can be adapted to any repo with a shell command runner.
 
@@ -17,9 +19,11 @@ Do not rely on agent memory. Each governed project must contain its own repo-loc
 1. `./.documentation-governor.json` defines the code, docs, inventory, and status files for that repo.
 2. A repo-local wrapper script locates the installed plugin on each machine.
 3. Package scripts expose consistent commands such as `docs:governor:bootstrap`, `docs:governor:refresh`, and `docs:check`.
-4. Agent instructions require the `documentation-governor` skill and tell agents to alert the user if the skill/plugin is unavailable.
-5. A human-readable failsafe doc explains the workflow and failure modes.
-6. CI, if available, runs the same `docs:check` command.
+4. A repo-local pre-commit hook installer wires `docs:check` into the commit path.
+5. A repo-local watcher reruns `docs:check` after saved file changes during active implementation.
+6. Agent instructions require the `documentation-governor` skill and tell agents to alert the user if the skill/plugin is unavailable.
+7. A human-readable failsafe doc explains the workflow and failure modes.
+8. CI, if available, runs the same `docs:check` command.
 
 ## Machine Requirement
 
@@ -54,6 +58,8 @@ AGENTS.md
 package.json
 scripts/documentation-governor.js
 scripts/check-docs.js
+scripts/install-docs-hook.js
+scripts/watch-docs.js
 docs/maintenance/documentation-failsafe.md
 docs/maintenance/project-catalog.json
 docs/maintenance/documentation-governor-status.json
@@ -430,6 +436,9 @@ Add these scripts to `package.json`:
 ```json
 {
   "scripts": {
+    "prepare": "node scripts/install-docs-hook.js",
+    "docs:hook:install": "node scripts/install-docs-hook.js",
+    "docs:watch": "node scripts/watch-docs.js",
     "docs:governor": "node scripts/documentation-governor.js",
     "docs:governor:bootstrap": "node scripts/documentation-governor.js bootstrap",
     "docs:governor:catalog": "node scripts/documentation-governor.js catalog",
@@ -441,11 +450,11 @@ Add these scripts to `package.json`:
 }
 ```
 
-If the project already has `docs:check`, keep the existing checks and call `node scripts/documentation-governor.js check` as the final step.
+If the project already has `docs:check`, keep the existing checks and call `node scripts/documentation-governor.js check` as the final step. If the project already uses `prepare`, merge `node scripts/install-docs-hook.js` into the existing lifecycle script instead of replacing unrelated setup.
 
 ## 4. Add Or Update `scripts/check-docs.js`
 
-For a new project without a docs check, use this minimal version:
+For a new project without a docs check, copy `templates/project-scripts/check-docs.js` into the target repo or use this minimal version:
 
 ```js
 const { spawnSync } = require("node:child_process");
@@ -491,7 +500,27 @@ function runDocumentationGovernor() {
 
 Call `runDocumentationGovernor()` only after the existing drift checks pass.
 
-## 5. Add Agent Instructions
+## 5. Add Or Update `scripts/install-docs-hook.js`
+
+Every governed project must have a local hook installer. Copy or adapt `templates/project-scripts/install-docs-hook.js` from this plugin repo into the target repo at `scripts/install-docs-hook.js`.
+
+The installer writes `.git/hooks/pre-commit` and adds a guarded block that runs the repo's `docs:check` command. It is intentionally local to each checkout because Git hooks are not committed. The package `prepare` script should call the installer so the hook is restored after dependency installation, and setup docs must also tell agents to run `pnpm docs:hook:install` or the equivalent package-manager command on a fresh clone.
+
+Emergency bypass is available with:
+
+```bash
+DOCUMENTATION_GOVERNOR_SKIP_HOOK=1 git commit ...
+```
+
+Only use that bypass when the user explicitly accepts the risk, then refresh documentation immediately afterward.
+
+## 6. Add Or Update `scripts/watch-docs.js`
+
+Every governed project must expose an active-session watcher. Copy or adapt `templates/project-scripts/watch-docs.js` from this plugin repo into the target repo at `scripts/watch-docs.js`.
+
+`docs:watch` reruns `docs:check` after saved file changes. It does not replace the final `docs:check`, the pre-commit hook, or CI. It exists to catch drift while work is still in progress, especially during multi-file implementation sessions.
+
+## 7. Add Agent Instructions
 
 Add this block to the root `AGENTS.md`. If the project already has docs rules, merge this into them.
 
@@ -508,21 +537,23 @@ Use the `documentation-governor` skill before finalizing any task that:
 
 If the `documentation-governor` skill or plugin is not available on the current machine, immediately alert the user before continuing documentation-governed work. Do not silently fall back to memory or skip the process.
 
-On a new machine or a fresh clone, run `pnpm docs:governor:bootstrap` before implementation work. This locates the installed Documentation Governor plugin, synchronizes the project catalog, and checks the current governed status. If the plugin is installed in a nonstandard location, set `DOCUMENTATION_GOVERNOR_SCRIPT` to the absolute `scripts/docs-governor.mjs` path or `DOCUMENTATION_GOVERNOR_HOME` to the plugin root.
+On a new machine or a fresh clone, run `pnpm docs:governor:bootstrap` and `pnpm docs:hook:install` before implementation work. This locates the installed Documentation Governor plugin, synchronizes the project catalog, checks the current governed status, and installs the local pre-commit documentation guard. If the plugin is installed in a nonstandard location, set `DOCUMENTATION_GOVERNOR_SCRIPT` to the absolute `scripts/docs-governor.mjs` path or `DOCUMENTATION_GOVERNOR_HOME` to the plugin root.
+
+During implementation sessions, run `pnpm docs:watch` in a spare terminal. It reruns the documentation guard after saved file changes and keeps drift visible while work is still in progress. If a watcher cannot stay open, run `pnpm docs:check` immediately after edits and before final handoff.
 
 For implementation work, do a documentation impact check before the final response:
 
 1. Identify whether the change affects docs.
 2. Update the relevant docs in the same turn when it does.
 3. Run `pnpm docs:governor:refresh -- --note "Describe the documentation refresh"` after governed code and human-readable docs change.
-4. Run `pnpm docs:check`.
+4. Run `pnpm docs:check` after code, docs, config, provider, permission, asset, or build-script changes.
 5. Run the relevant typecheck/test command for any code touched.
 6. In the final response, list docs updated or explicitly say why docs were not needed.
 
 Never write real secrets, tokens, private keys, webhook signing secrets, or provider credentials into docs, tracked env files, examples, commits, or final responses.
 ````
 
-## 6. Add Human-Readable Failsafe Docs
+## 8. Add Human-Readable Failsafe Docs
 
 Create `docs/maintenance/documentation-failsafe.md`:
 
@@ -548,6 +579,16 @@ Before a task is called complete:
 5. Run relevant code verification for touched packages.
 6. Summarize changed docs and remaining documentation risks in the final response.
 
+## Automated Local Guards
+
+`pnpm docs:check` is the primary local guard. Run project-specific stale-reference or docs/config drift scans first, then run Documentation Governor through `scripts/documentation-governor.js`.
+
+`pnpm docs:hook:install` installs a local Git pre-commit hook that runs `pnpm docs:check` before commits. The hook is also installed by the package `prepare` lifecycle when dependencies are installed in a Git checkout. This cannot rewrite docs automatically, but it prevents local commits from moving forward when docs drift is detected.
+
+`pnpm docs:watch` is the active-editing guard. It watches repo files and reruns `pnpm docs:check` after saved changes, so documentation drift is visible before the commit boundary.
+
+Use `DOCUMENTATION_GOVERNOR_SKIP_HOOK=1 git commit ...` only for emergency local commits, and follow up with a documentation refresh immediately.
+
 ## Documentation Governor
 
 Documentation Governor is initialized for this repo through `.documentation-governor.json`.
@@ -561,9 +602,10 @@ On a new machine or fresh clone, run:
 
 ```bash
 pnpm docs:governor:bootstrap
+pnpm docs:hook:install
 ```
 
-The wrapper locates `scripts/docs-governor.mjs` from the installed Documentation Governor plugin. If the plugin is missing, the wrapper fails with an explicit alert instead of letting the docs workflow silently pass.
+The wrapper locates `scripts/docs-governor.mjs` from the installed Documentation Governor plugin. If the plugin is missing, the wrapper fails with an explicit alert instead of letting the docs workflow silently pass. During implementation sessions, run `pnpm docs:watch` in a separate terminal, or run `pnpm docs:check` immediately after edits when a watcher cannot stay open.
 
 When implementation changes governed code, update human-readable docs, then run:
 
@@ -577,13 +619,14 @@ Do not satisfy the governor by stamping only. Human-readable docs must change wh
 
 Add this file to the repo README or handoff docs so future sessions can find it quickly.
 
-## 7. Bootstrap The Repo
+## 9. Bootstrap The Repo
 
 After the files above are added:
 
 ```bash
 pnpm docs:governor where
 pnpm docs:governor:bootstrap
+pnpm docs:hook:install
 ```
 
 If `where` or `bootstrap` cannot find the plugin, install the plugin on that machine or set:
@@ -610,22 +653,25 @@ Commit these generated artifacts:
 - `docs/maintenance/project-catalog.json`
 - `docs/maintenance/documentation-governor-status.json`
 
-## 8. Normal Development Workflow
+## 10. Normal Development Workflow
 
 For every implementation task:
 
-1. Before work on a new machine, run `pnpm docs:governor:bootstrap`.
-2. Make the implementation change.
-3. Decide whether docs are impacted.
-4. Update the relevant human-readable docs when they are impacted.
-5. Run `pnpm docs:governor:refresh -- --note "Short note about the docs refresh"`.
-6. Run `pnpm docs:check`.
-7. Run targeted code verification.
-8. In the final response, list docs updated or say docs were not needed.
+1. Before work on a new machine, run `pnpm docs:governor:bootstrap` and `pnpm docs:hook:install`.
+2. Run `pnpm docs:watch` during active implementation sessions. If a watcher cannot stay open, run `pnpm docs:check` immediately after edits and before final handoff.
+3. Make the implementation change.
+4. Decide whether docs are impacted.
+5. Update the relevant human-readable docs when they are impacted.
+6. Run `pnpm docs:governor:refresh -- --note "Short note about the docs refresh"`.
+7. Run `pnpm docs:check`.
+8. Run targeted code verification.
+9. In the final response, list docs updated or say docs were not needed.
 
 Do not run `docs:governor:refresh` as a substitute for real documentation. If governed code behavior changed, update human-readable docs first.
 
-## 9. CI Wiring
+Do not treat the watcher as a substitute for `docs:check`; it is a fast feedback loop. `docs:check` remains the required final gate and the pre-commit hook remains the required local commit gate.
+
+## 11. CI Wiring
 
 Use the same repo command in CI. A GitHub Actions pattern:
 
@@ -678,7 +724,7 @@ env:
 
 and clone the plugin before `pnpm docs:check`.
 
-## 10. Failure Triage
+## 12. Failure Triage
 
 Use this quick map:
 
@@ -686,12 +732,14 @@ Use this quick map:
 | --- | --- | --- |
 | Plugin not found | Machine is not ready for governed work | Install plugin, restart Codex, or set `DOCUMENTATION_GOVERNOR_SCRIPT` / `DOCUMENTATION_GOVERNOR_HOME`; alert the user immediately |
 | Catalog file is missing | Bootstrap was not run | Run `pnpm docs:governor:bootstrap` |
+| Pre-commit hook is missing | Fresh clone, old checkout, or lifecycle script was not run | Run `pnpm docs:hook:install`; keep `prepare` wired to the hook installer |
+| `docs:watch` command is missing | Project is missing active local docs feedback | Add `scripts/watch-docs.js` and the `docs:watch` package script |
 | Catalog is missing a project | New app/package/service was added | Update docs to mention the new project, then run `pnpm docs:governor:refresh -- --note "..."` |
 | Governed code changed but no human-readable documentation file changed | Code/config changed without docs | Update the relevant docs, then refresh |
 | Governed code changed but status file was not updated | Docs may be updated but the refresh was not stamped | Run `pnpm docs:governor:refresh -- --note "..."` |
 | `pnpm docs:check` passes stale-pattern scan but governor fails | Narrow local docs scan is fine, but governance artifacts are stale | Follow the governor failure message |
 
-## 11. What To Tell Future Agents
+## 13. What To Tell Future Agents
 
 When assigning a new repo setup task, use a prompt like this:
 
@@ -700,10 +748,15 @@ Use the Documentation Governor plugin and read PORTABLE_PROJECT_SETUP.md from th
 
 - add .documentation-governor.json tailored to this repo
 - add scripts/documentation-governor.js
-- wire package scripts for docs:governor:* and docs:check
+- add scripts/check-docs.js
+- add scripts/install-docs-hook.js
+- add scripts/watch-docs.js
+- wire package scripts for docs:governor:*, docs:hook:install, docs:watch, and docs:check
+- wire the package prepare lifecycle to install the docs hook when this repo supports lifecycle scripts
 - add AGENTS.md documentation-failsafe rules
 - add docs/maintenance/documentation-failsafe.md
 - run pnpm docs:governor:bootstrap
+- run pnpm docs:hook:install
 - update human-readable docs if needed
 - run pnpm docs:governor:refresh -- --note "Initialized Documentation Governor."
 - run pnpm docs:check
@@ -711,12 +764,14 @@ Use the Documentation Governor plugin and read PORTABLE_PROJECT_SETUP.md from th
 If the documentation-governor skill or plugin is not available, alert me immediately and stop before doing governed implementation work.
 ```
 
-## 12. Hard Rules
+## 14. Hard Rules
 
 - Do not skip the plugin check on a new machine.
+- Do not skip local hook installation in a governed Git checkout.
 - Do not silently continue if the skill or plugin is missing.
 - Do not rely on hard-coded machine paths in project docs or scripts.
 - Do not satisfy the governor by changing only the status stamp.
 - Do not commit secrets, tokens, keys, webhook signing secrets, provider credentials, or machine-local auth material.
 - Do not ignore untracked files during checks. The wrapper includes them on purpose.
+- Do not omit `docs:watch` from new governed projects; it is the required active-session feedback loop.
 - Do not treat `docs:check` as a prose-quality guarantee. It enforces process. Humans and agents must still write accurate documentation.

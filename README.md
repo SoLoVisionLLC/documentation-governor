@@ -4,11 +4,12 @@
 
 GitHub repository: [solovision24/documentation-governor](https://github.com/solovision24/documentation-governor)
 
-It provides three things:
+It provides four things:
 
 - A Codex skill for documentation refresh work.
 - A deterministic governance script that CI can enforce.
 - Templates and install tooling so the same process can be reused on multiple machines.
+- Repo-local hook and watcher templates so future projects get active local documentation checks, not just a final CI gate.
 
 ## What it enforces
 
@@ -18,9 +19,12 @@ The plugin is designed around an explicit process rather than agent memory:
 2. Update human-readable docs after code changes.
 3. Regenerate the project catalog when new projects appear.
 4. Update a documentation status stamp.
-5. Fail CI if code changed but docs, catalog, or stamp were not refreshed.
+5. Run project-specific stale-reference checks before the governor, when a repo needs them.
+6. Install a local pre-commit hook that blocks commits when `docs:check` fails.
+7. Provide a local watcher that reruns `docs:check` after saved file changes during active implementation.
+8. Fail CI if code changed but docs, catalog, or stamp were not refreshed.
 
-That gives you a consistent workflow across machines and a hard merge gate inside each repo.
+That gives you a consistent workflow across machines, immediate local feedback while editing, a commit gate inside each checkout, and a hard merge gate inside CI.
 
 ## Files
 
@@ -29,6 +33,7 @@ That gives you a consistent workflow across machines and a hard merge gate insid
 - `scripts/install-home-local.mjs`: Copies the plugin into your home-local Codex plugins directory and updates the local marketplace file.
 - `schemas/documentation-governor.schema.json`: JSON schema for repo config files.
 - `templates/repo.documentation-governor.example.json`: Example repo config.
+- `templates/project-scripts/`: Repo-local scripts future projects should copy or adapt for `docs:check`, hook installation, and active docs watching.
 
 ## Repository contents
 
@@ -36,7 +41,9 @@ This repo is the source of truth for the plugin itself. Project repos should not
 
 - install the plugin home-local on each Codex machine
 - keep a repo-local `./.documentation-governor.json`
-- keep repo-local governance artifacts under `docs/_governance/`
+- keep repo-local governance artifacts under `docs/maintenance/`
+- keep repo-local scripts for the portable wrapper, `docs:check`, pre-commit hook installation, and `docs:watch`
+- wire package scripts so `docs:check`, `docs:hook:install`, and `docs:watch` exist in every governed project
 - wire CI to install this repo and run the docs check
 
 ## Install on a Codex machine
@@ -53,26 +60,35 @@ After installing, restart Codex to pick up the plugin.
 
 ## Use from a project repo
 
-Typical Windows package scripts in a governed repo call the home-local plugin directly:
+The required modern project setup is the portable workflow in [PORTABLE_PROJECT_SETUP.md](PORTABLE_PROJECT_SETUP.md). In short, each governed project should expose repo-local scripts like this:
 
 ```json
 {
   "scripts": {
-    "docs:catalog": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& \\\"$HOME\\\\plugins\\\\documentation-governor\\\\scripts\\\\docs-catalog.ps1\\\" -Config ./.documentation-governor.json\"",
-    "docs:stamp": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& \\\"$HOME\\\\plugins\\\\documentation-governor\\\\scripts\\\\docs-stamp.ps1\\\" -Config ./.documentation-governor.json\"",
-    "docs:check": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& \\\"$HOME\\\\plugins\\\\documentation-governor\\\\scripts\\\\docs-check.ps1\\\" -Config ./.documentation-governor.json -BaseRef origin/main\""
+    "prepare": "node scripts/install-docs-hook.js",
+    "docs:hook:install": "node scripts/install-docs-hook.js",
+    "docs:watch": "node scripts/watch-docs.js",
+    "docs:governor": "node scripts/documentation-governor.js",
+    "docs:governor:bootstrap": "node scripts/documentation-governor.js bootstrap",
+    "docs:governor:catalog": "node scripts/documentation-governor.js catalog",
+    "docs:governor:check": "node scripts/documentation-governor.js check",
+    "docs:governor:stamp": "node scripts/documentation-governor.js stamp",
+    "docs:governor:refresh": "node scripts/documentation-governor.js refresh",
+    "docs:check": "node scripts/check-docs.js"
   }
 }
 ```
 
 The intended workflow inside a project repo is:
 
-1. Run `pnpm docs:catalog`.
-2. Refresh the actual docs in `docs/`.
-3. Run `pnpm docs:stamp`.
-4. Run `pnpm docs:check`.
+1. Run `pnpm docs:governor:bootstrap`.
+2. Run `pnpm docs:hook:install`.
+3. Run `pnpm docs:watch` during active implementation sessions. If a watcher cannot stay open, run `pnpm docs:check` immediately after edits and before final handoff.
+4. Refresh the actual docs in `docs/`.
+5. Run `pnpm docs:governor:refresh -- --note "Describe the documentation refresh"`.
+6. Run `pnpm docs:check`.
 
-The PowerShell wrappers exist because Windows CI and some constrained environments block Node child-process git calls. The wrappers gather changed files with PowerShell/git and then call the core `docs-governor.mjs` logic.
+The PowerShell wrappers remain available for older Windows CI and constrained environments. New projects should prefer the repo-local Node wrapper from the portable setup guide because it searches the installed plugin paths, includes untracked files in checks, and gives a single package-script interface across machines.
 
 ## CI wiring
 
@@ -89,5 +105,7 @@ The plugin can guarantee that documentation refreshes are required by process. I
 
 - Plugin for shared workflow
 - Repo config for local scope
+- Local pre-commit hook for commit-time enforcement
+- Local watcher for active editing feedback
 - CI gate for enforcement
 - Optional Codex automation for scheduled sweeps

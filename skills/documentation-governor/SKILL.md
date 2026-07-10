@@ -27,9 +27,9 @@ If the installed plugin cannot be located, immediately alert the user instead of
 
 1. Read `./.documentation-governor.json`.
 2. Confirm the repo-local automation exists: `scripts/check-docs.js`, `scripts/install-docs-hook.js`, `scripts/watch-docs.js`, package scripts for `docs:check`, `docs:hook:install`, and `docs:watch`, and the local hook installed through `docs:hook:install`. If these are missing, add them before continuing unless the user explicitly asks only for a diagnosis.
-3. Run the installed plugin's catalog command. Prefer repo-local `docs:governor:*` scripts when available.
+3. Run the installed plugin's catalog command. Prefer repo-local `docs:governor:*` scripts when available and runnable in the current shell.
 
-If repo-local scripts are not available, use the PowerShell wrappers when `pwsh`, `powershell`, or Windows CI is available. On macOS/Linux Codex environments where those wrappers are not available, use the core Node script directly from the installed plugin directory. When this skill is loaded from an installed plugin, resolve `/path/to/documentation-governor` from the parent plugin directory that contains this `SKILL.md`; the Node script lives at `scripts/docs-governor.mjs`.
+If repo-local scripts are not available, or if they exist but are PowerShell-only and the current macOS/Linux environment has no `pwsh` or `powershell`, use the core Node script directly from the installed plugin directory. When this skill is loaded from an installed plugin, resolve `/path/to/documentation-governor` from the parent plugin directory that contains this `SKILL.md`; the Node script lives at `scripts/docs-governor.mjs`.
 
 ```bash
 node /path/to/documentation-governor/scripts/docs-governor.mjs write-catalog --config ./.documentation-governor.json
@@ -41,16 +41,23 @@ On Windows with a home-local install:
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& \"$HOME\\plugins\\documentation-governor\\scripts\\docs-catalog.ps1\" -Config ./.documentation-governor.json"
 ```
 
-4. Inspect the current governance status. Prefer the repo-local `docs:check` command when available so project-specific stale scans run before the governor. Otherwise use the Node command or PowerShell wrapper:
+4. Inspect the current governance status. Prefer the repo-local `docs:check` command when available and runnable so project-specific stale scans run before the governor. If it is PowerShell-only and PowerShell is unavailable, run the Node check directly instead of skipping the gate. Otherwise use the Node command or PowerShell wrapper:
 
 ```bash
 node /path/to/documentation-governor/scripts/docs-governor.mjs check --config ./.documentation-governor.json
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& \"$HOME\\plugins\\documentation-governor\\scripts\\docs-check.ps1\" -Config ./.documentation-governor.json"
 ```
 
+When checking uncommitted work, include the working-tree changed files explicitly because the default diff range may only inspect committed changes:
+
+```bash
+(git diff --name-only origin/main...HEAD; git diff --name-only; git diff --name-only --cached) | sort -u > /tmp/docs-governor-changed-files.txt
+node /path/to/documentation-governor/scripts/docs-governor.mjs check --config ./.documentation-governor.json --files-file /tmp/docs-governor-changed-files.txt
+```
+
 5. Read the changed code and the existing docs.
 6. Update the human-readable docs under `docs/`.
-7. Record the refresh. Prefer repo-local `docs:governor:refresh` when available. Otherwise use the Node command or PowerShell wrapper:
+7. Record the refresh. Prefer repo-local `docs:governor:refresh` when available and runnable. Otherwise use the Node command or PowerShell wrapper:
 
 ```bash
 node /path/to/documentation-governor/scripts/docs-governor.mjs write-stamp --config ./.documentation-governor.json --note "Describe the refresh"
